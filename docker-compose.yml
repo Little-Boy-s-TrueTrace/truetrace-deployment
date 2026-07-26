@@ -165,6 +165,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/health || exit 1"]
       interval: 5s

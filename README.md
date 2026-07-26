@@ -10,6 +10,20 @@ cp .env.example .env
 docker-compose up -d
 ```
 
+## Full-stack verification
+
+From the superproject root:
+
+```bash
+docker compose -f truetrace-deployment/docker-compose.yml up -d --build --wait
+python truetrace-deployment/scripts/full_stack_smoke.py
+```
+
+The verifier checks normal and synthetic KYC decisions, then sends VND 1
+billion into a mule account and fans out VND 800 million to 20 beneficiaries
+within 60 seconds. It requires a freeze, an alert for the full suspicious
+amount, and a linked draft STR.
+
 ## Services
 
 | Service | Port | Description |
