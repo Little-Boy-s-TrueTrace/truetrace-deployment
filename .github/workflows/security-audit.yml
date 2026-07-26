@@ -29,8 +29,9 @@ jobs:
 
     - name: Validate Kubernetes Kustomize Overlays
       run: |
-        kubectl kustomize kubernetes/overlays/production > /dev/null
-        echo "Kustomize production overlay validated successfully!"
+        kubectl kustomize kubernetes/overlays/aws > /dev/null
+        kubectl kustomize kubernetes/overlays/local > /dev/null
+        echo "Kustomize AWS and local overlays validated successfully!"
 
     - name: Lint Helm Chart
       run: |
