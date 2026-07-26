@@ -6,6 +6,7 @@ resources:
   - postgres.yaml
   - redis.yaml
   - kafka.yaml
+  - microservices.yaml
   - hpa.yaml
 
 generatorOptions:
