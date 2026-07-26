@@ -1,0 +1,15 @@
+apiVersion: v2
+name: truetrace-platform
+description: Helm chart to deploy the TrueTrace Banking and SOAR Defensive Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - security
+  - banking
+  - soar
+  - SIEM
+  - defense
+home: https://github.com/Little-Boy-s-Aegis
+sources:
+  - https://github.com/Little-Boy-s-Aegis/aegis-bank-deployment

@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - metrics-server-insecure.yaml
+  - postgres.yaml
+  - redis.yaml
+  - kafka.yaml
+  - hpa.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: fluent-bit-config
+    files:
+      - fluent-bit.conf=configs/fluent-bit.conf
+      - parsers.conf=configs/parsers.conf
+      - filter_threats.lua=configs/filter_threats.lua
+  - name: nginx-gateway-config
+    files:
+      - default.conf=configs/default.conf
+
+secretGenerator:
+  - name: truetrace-secrets
+    files:
+      - htpasswd=configs/.htpasswd
+    literals:
+      - postgres-password=postgres-prod-secret-1234
+      - jwt-secret=truetrace-jwt-secure-signing-key-high-entropy-12345
+      - truetrace-security-sync-token=truetrace-sync-token-9876-xyz
+      - dashscope-api-key=mock-dashscope-api-key-value
