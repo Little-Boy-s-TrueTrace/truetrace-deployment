@@ -300,9 +300,32 @@ spec:
               name: truetrace-secrets
               key: postgres-password
         - name: VISION_API_PROVIDER
-          value: mock
+          value: demo
+        - name: VISION_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: truetrace-secrets
+              key: dashscope-api-key
         - name: LLM_PROVIDER
-          value: mock
+          value: demo
+        - name: LLM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: truetrace-secrets
+              key: dashscope-api-key
+        - name: TRUETRACE_SECURITY_SYNC_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: truetrace-secrets
+              key: truetrace-security-sync-token
+        - name: KAFKA_MAX_MESSAGE_BYTES
+          value: "10485760"
+        - name: MONEY_TRAIL_WINDOW_SECONDS
+          value: "60"
+        - name: FAN_OUT_MIN_TARGETS
+          value: "20"
+        - name: RAPID_MOVEMENT_MIN_INFLOW_VND
+          value: "1000000000"
         ports:
         - containerPort: 8080
         resources:

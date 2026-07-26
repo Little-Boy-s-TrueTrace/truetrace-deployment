@@ -1,14 +1,16 @@
-# Aegis Platform - Enterprise Banking & SOAR System
+# TrueTrace Multi-Agent Compliance Platform
 
-This chart deploys the **Aegis Banking and SOAR Defensive Platform** inside your Kubernetes cluster.
+Chart này triển khai TrueTrace cho Kubernetes:
 
-## Features
-- **Core Banking Application**: Secure Spring Boot e-banking application with SQLi/XSS/Brute Force hardened endpoints.
-- **SOC Alert Dashboard**: Go/React real-time security events dashboard with Kafka stream listeners.
-- **SOAR Active Response Engine**: Dual active-standby Python orchestrators deploying automated mitigation playbooks via Fortinet API sandbox.
-- **Log Processing & WAF**: Fluent-Bit log forwarder with real-time Lua log parsing engine.
+- Spring Boot core API và PostgreSQL;
+- Kafka/Redis cho event và state;
+- ba agent Deepfake Inspector, Money-Trail Explorer và AML Reporter;
+- cổng khách hàng và compliance command center;
+- Nginx gateway và health/resource policies.
 
-## Prerequisites
-- Kubernetes 1.20+
-- Helm 3.0+
-- Rancher 2.5+ (optional for Catalog UI)
+Mặc định agent chạy `demo` mode để cài đặt local không cần cloud credential. Với
+production, cấu hình Alibaba Model Studio/eKYC endpoint, DashScope API key,
+identity registry gateway và secret nội bộ qua Kubernetes Secret hoặc external
+secret manager. STR luôn được tạo dưới dạng nháp để chuyên viên AML duyệt.
+
+Yêu cầu: Kubernetes 1.25+ và Helm 3.

@@ -9,7 +9,7 @@ secrets:
   postgresPassword: "postgres-prod-secret-1234"
   jwtSecret: "truetrace-jwt-secure-signing-key-high-entropy-12345"
   truetraceSecuritySyncToken: "truetrace-sync-token-9876-xyz"
-  dashscopeApiKey: "mock-dashscope-api-key-value"
+  dashscopeApiKey: "change-me-or-use-external-secret"
 
 # AWS Configuration (Only used when environment is "aws")
 aws:
@@ -52,6 +52,12 @@ agentEngine:
   replicaCount: 1
   image: truetrace-agent-engine:latest
   imagePullPolicy: Never
+  visionProvider: demo
+  visionEndpoint: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+  visionModel: qwen-vl-plus
+  llmProvider: demo
+  llmEndpoint: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+  llmModel: qwen-plus
 
 sharedLogs:
   accessMode: ReadWriteOnce

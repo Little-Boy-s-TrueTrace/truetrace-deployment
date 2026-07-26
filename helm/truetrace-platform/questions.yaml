@@ -51,7 +51,7 @@ questions:
     group: "Application Secrets"
 
   - variable: secrets.dashscopeApiKey
-    default: "mock-dashscope-api-key-value"
+    default: "change-me-or-use-demo-mode"
     description: "Alibaba Dashscope API Key for the Qwen 3.7 Plus Agent (optional)"
     label: "Qwen API Key"
     type: password

@@ -1,15 +1,15 @@
 apiVersion: v2
 name: truetrace-platform
-description: Helm chart to deploy the TrueTrace Banking and SOAR Defensive Platform
+description: Helm chart for the TrueTrace Multi-Agent Deepfake and AML Compliance Platform
 type: application
 version: 1.0.0
 appVersion: "1.0.0"
 keywords:
   - security
   - banking
-  - soar
-  - SIEM
-  - defense
-home: https://github.com/Little-Boy-s-Aegis
+  - aml
+  - deepfake
+  - compliance
+home: https://github.com/Little-Boy-s-TrueTrace/truetrace
 sources:
-  - https://github.com/Little-Boy-s-Aegis/aegis-bank-deployment
+  - https://github.com/Little-Boy-s-TrueTrace/truetrace-deployment

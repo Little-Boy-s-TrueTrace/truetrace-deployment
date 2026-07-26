@@ -64,6 +64,8 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_NUM_PARTITIONS: 3
       KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MESSAGE_MAX_BYTES: 10485760
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 10485760
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       CLUSTER_ID: ${KAFKA_CLUSTER_ID:-TrueTraceKafkaCluster001}
@@ -154,8 +156,10 @@ services:
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
       JAVA_TOOL_OPTIONS: "-Xms128m -Xmx384m"
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_MAX_MESSAGE_BYTES: 10485760
       JWT_SECRET: ${JWT_SECRET:-truetrace-jwt-secret-change-in-production}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      TRUETRACE_SECURITY_SYNC_TOKEN: ${TRUETRACE_SECURITY_SYNC_TOKEN:-change-me-internal-service-token}
     depends_on:
       postgres:
         condition: service_healthy
@@ -181,6 +185,7 @@ services:
     environment:
       KAFKA_BOOTSTRAP: kafka:29092
       KAFKA_GROUP_ID: truetrace-engine
+      KAFKA_MAX_MESSAGE_BYTES: 10485760
       REDIS_HOST: redis
       REDIS_PORT: 6379
       BACKEND_URL: http://backend:8080
@@ -189,17 +194,25 @@ services:
       DB_NAME: ${POSTGRES_DB:-truetrace}
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      # Vision API (mock by default)
-      VISION_API_PROVIDER: ${VISION_API_PROVIDER:-mock}
+      # Vision API (deterministic demo mode by default)
+      VISION_API_PROVIDER: ${VISION_API_PROVIDER:-demo}
       VISION_API_KEY: ${VISION_API_KEY:-}
-      VISION_API_ENDPOINT: ${VISION_API_ENDPOINT:-}
+      VISION_API_ENDPOINT: ${VISION_API_ENDPOINT:-https://dashscope-intl.aliyuncs.com/compatible-mode/v1}
+      VISION_MODEL: ${VISION_MODEL:-qwen-vl-plus}
+      IDENTITY_REGISTRY_ENDPOINT: ${IDENTITY_REGISTRY_ENDPOINT:-}
+      IDENTITY_REGISTRY_API_KEY: ${IDENTITY_REGISTRY_API_KEY:-}
       # LLM for report generation
-      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_PROVIDER: ${LLM_PROVIDER:-demo}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-qwen-plus}
+      LLM_API_ENDPOINT: ${LLM_API_ENDPOINT:-https://dashscope-intl.aliyuncs.com/compatible-mode/v1}
       # Agent thresholds
       MONEY_TRAIL_FREEZE_THRESHOLD: ${MONEY_TRAIL_FREEZE_THRESHOLD:-7.0}
-      MONEY_TRAIL_WINDOW_SECONDS: ${MONEY_TRAIL_WINDOW_SECONDS:-600}
+      MONEY_TRAIL_WINDOW_SECONDS: ${MONEY_TRAIL_WINDOW_SECONDS:-60}
+      FAN_OUT_MIN_TARGETS: ${FAN_OUT_MIN_TARGETS:-20}
+      RAPID_MOVEMENT_MIN_INFLOW_VND: ${RAPID_MOVEMENT_MIN_INFLOW_VND:-1000000000}
+      RAPID_MOVEMENT_RATIO: ${RAPID_MOVEMENT_RATIO:-0.80}
+      TRUETRACE_SECURITY_SYNC_TOKEN: ${TRUETRACE_SECURITY_SYNC_TOKEN:-change-me-internal-service-token}
       # Agent prompt directories
       AGENT_DEEPFAKE_DIR: /agents/deepfake-inspector
       AGENT_MONEY_TRAIL_DIR: /agents/money-trail
