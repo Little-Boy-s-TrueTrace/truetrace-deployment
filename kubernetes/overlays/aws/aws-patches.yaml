@@ -1,63 +1,3 @@
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: postgres
-$patch: delete
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: kafka
-$patch: delete
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: redis
-$patch: delete
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres
-$patch: delete
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres-hl
-$patch: delete
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis
-$patch: delete
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka-hl
-$patch: delete
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka-1
-$patch: delete
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka-2
-$patch: delete
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka-3
-$patch: delete
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -88,7 +28,6 @@ spec:
               value: "jdbc:postgresql://$(AWS_RDS_ENDPOINT):5432/truetrace"
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: "$(AWS_MSK_BROKERS)"
-          # Inject AWS configuration values
           envFrom:
             - configMapRef:
                 name: aws-config
