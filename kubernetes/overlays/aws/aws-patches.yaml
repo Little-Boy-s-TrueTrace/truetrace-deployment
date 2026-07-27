@@ -28,6 +28,12 @@ spec:
               value: "jdbc:postgresql://$(AWS_RDS_ENDPOINT):5432/truetrace"
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: "$(AWS_MSK_BROKERS)"
+            - name: SPRING_PROFILES_ACTIVE
+              value: production
+            - name: TRUETRACE_DEMO_SEED_ENABLED
+              value: "false"
+            - name: TRUETRACE_ALLOWED_ORIGINS
+              value: "$(TRUETRACE_ALLOWED_ORIGINS)"
           envFrom:
             - configMapRef:
                 name: aws-config
@@ -46,6 +52,12 @@ spec:
               value: "postgres://postgres:$(POSTGRES_PASSWORD)@$(AWS_RDS_ENDPOINT):5432/truetrace?sslmode=require"
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: "$(AWS_MSK_BROKERS)"
+            - name: SPRING_PROFILES_ACTIVE
+              value: production
+            - name: TRUETRACE_DEMO_SEED_ENABLED
+              value: "false"
+            - name: TRUETRACE_ALLOWED_ORIGINS
+              value: "$(TRUETRACE_ALLOWED_ORIGINS)"
           envFrom:
             - configMapRef:
                 name: aws-config
@@ -68,6 +80,19 @@ spec:
               value: "$(POSTGRES_DB)"
             - name: REDIS_HOST
               value: "$(AWS_ELASTICACHE_ENDPOINT)"
+            - name: TRUETRACE_ENV
+              value: production
+            - name: VISION_API_PROVIDER
+              value: alibaba-model-studio
+            - name: LLM_PROVIDER
+              value: dashscope
+            - name: IDENTITY_REGISTRY_ENDPOINT
+              value: "$(IDENTITY_REGISTRY_ENDPOINT)"
+            - name: IDENTITY_REGISTRY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: truetrace-secrets
+                  key: identity-registry-api-key
           envFrom:
             - configMapRef:
                 name: aws-config

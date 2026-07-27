@@ -49,6 +49,26 @@ def request_json(
         raise RuntimeError(f"{method} {url} returned {exc.code}: {details}") from exc
 
 
+
+def expect_http_status(
+    method: str,
+    url: str,
+    expected: int,
+    payload: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> None:
+    request_headers = dict(headers or {})
+    body = None
+    if payload is not None:
+        body = json.dumps(payload).encode()
+        request_headers["Content-Type"] = "application/json"
+    request = Request(url, data=body, headers=request_headers, method=method)
+    try:
+        with urlopen(request, timeout=30) as response:
+            actual = response.status
+    except HTTPError as exc:
+        actual = exc.code
+    assert actual == expected, f"{method} {url}: expected {expected}, got {actual}"
 def wait_for_url(url: str) -> None:
     last_error: Exception | None = None
     for _ in range(60):
@@ -91,7 +111,7 @@ def multipart_body(fields: dict[str, str], files: dict[str, Path]) -> tuple[byte
     return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
 
-def create_kyc(customer_name: str, cccd: str, image: Path) -> str:
+def create_kyc(token: str, customer_name: str, cccd: str, image: Path) -> str:
     body, content_type = multipart_body(
         {"customerName": customer_name, "cccdNumber": cccd},
         {"selfie": image, "idFront": image, "idBack": image},
@@ -99,16 +119,23 @@ def create_kyc(customer_name: str, cccd: str, image: Path) -> str:
     result = request_json(
         "POST",
         f"{BANK_API}/kyc/sessions",
-        headers={"Content-Type": content_type},
+        headers={
+            "Content-Type": content_type,
+            "Authorization": f"Bearer {token}",
+        },
         body=body,
     )
     return result["sessionId"]
 
 
-def wait_for_kyc_status(session_id: str, expected: str) -> dict[str, Any]:
+def wait_for_kyc_status(token: str, session_id: str, expected: str) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for _ in range(30):
-        result = request_json("GET", f"{BANK_API}/kyc/sessions/{session_id}")
+        result = request_json(
+            "GET",
+            f"{BANK_API}/kyc/sessions/{session_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
         if result.get("status") == expected:
             return result
         time.sleep(1)
@@ -180,20 +207,28 @@ def psql(query: str) -> str:
 
 def main() -> None:
     wait_for_url(f"{BASE_URL}/")
+
+    auth_stamp = str(int(time.time()))
+    auth_username = f"kyc_{auth_stamp}"
+    auth_password = "Test@12345"
+    register(auth_username, auth_password)
+    auth_token = login(auth_username, auth_password)
     wait_for_url(f"{BASE_URL}/api-bank/health")
     wait_for_url(f"{BASE_URL}/soc/")
 
+    expect_http_status("GET", f"{BANK_API}/aml/alerts", 401)
+
     approved_id = create_kyc(
-        "TrueTrace E2E Customer", "001090123457", IMAGE_PATH
+        auth_token, "TrueTrace E2E Customer", "001090123457", IMAGE_PATH
     )
-    approved = wait_for_kyc_status(approved_id, "APPROVED")
+    approved = wait_for_kyc_status(auth_token, approved_id, "APPROVED")
     assert approved["cccdValid"] is True
     assert approved["deepfakeScore"] < 50
 
     rejected_id = create_kyc(
-        "TrueTrace Synthetic Test", "001090123458", SYNTHETIC_PATH
+        auth_token, "TrueTrace Synthetic Test", "001090123458", SYNTHETIC_PATH
     )
-    rejected = wait_for_kyc_status(rejected_id, "REJECTED")
+    rejected = wait_for_kyc_status(auth_token, rejected_id, "REJECTED")
     assert rejected["deepfakeScore"] >= 80
     assert rejected["recommendedAction"] == "BLOCK_ONBOARDING"
 
@@ -251,7 +286,11 @@ def main() -> None:
             "SELECT status FROM accounts "
             f"WHERE account_number='{mule_account}';"
         )
-        alerts = request_json("GET", f"{BANK_API}/aml/alerts")
+        alerts = request_json(
+            "GET",
+            f"{BANK_API}/aml/alerts",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
         matching_alerts = [
             item
             for item in alerts
@@ -259,7 +298,11 @@ def main() -> None:
         ]
         if matching_alerts:
             alert = max(matching_alerts, key=lambda item: item["id"])
-            reports = request_json("GET", f"{BANK_API}/str/reports")
+            reports = request_json(
+                "GET",
+                f"{BANK_API}/str/reports",
+                headers={"Authorization": f"Bearer {auth_token}"},
+            )
             matching_reports = [
                 item for item in reports if item.get("alertId") == alert["id"]
             ]
@@ -277,6 +320,18 @@ def main() -> None:
     assert report["status"] == "DRAFT"
     assert report["riskScore"] == 10
     assert float(report["totalAmount"]) == 1_000_000_000
+
+    auth_headers = {"Authorization": f"Bearer {auth_token}"}
+    report_url = f"{BANK_API}/str/reports/{report['reportId']}"
+    expect_http_status("POST", f"{report_url}/submit", 409, headers=auth_headers)
+    review_payload = dict(report)
+    review_payload["status"] = "READY_FOR_REVIEW"
+    reviewed = request_json("PUT", f"{report_url}/status", review_payload, auth_headers)
+    assert reviewed["status"] == "READY_FOR_REVIEW"
+    assert reviewed["reviewedBy"] == auth_username
+    submitted = request_json("POST", f"{report_url}/submit", headers=auth_headers)
+    assert submitted["status"] == "SUBMITTED"
+    assert submitted["submittedBy"] == auth_username
 
     print("TrueTrace full-stack smoke test passed")
     print(f"KYC approved={approved_id} rejected={rejected_id}")

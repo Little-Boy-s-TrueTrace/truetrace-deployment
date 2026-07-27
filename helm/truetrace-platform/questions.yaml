@@ -27,7 +27,7 @@ questions:
     group: "Networking Config"
 
   - variable: secrets.postgresPassword
-    default: "postgres-prod-secret-1234"
+    default: ""
     description: "Password for the Postgres database master user"
     label: "Postgres Password"
     type: password
@@ -35,7 +35,7 @@ questions:
     group: "Application Secrets"
 
   - variable: secrets.jwtSecret
-    default: "truetrace-jwt-secure-signing-key-high-entropy-12345"
+    default: ""
     description: "Private signing key for JWT tokens"
     label: "JWT Secret Key"
     type: password
@@ -43,7 +43,7 @@ questions:
     group: "Application Secrets"
 
   - variable: secrets.truetraceSecuritySyncToken
-    default: "truetrace-sync-token-9876-xyz"
+    default: ""
     description: "Internal microservice authentication token"
     label: "TrueTrace Sync Token"
     type: password
@@ -51,8 +51,8 @@ questions:
     group: "Application Secrets"
 
   - variable: secrets.dashscopeApiKey
-    default: "change-me-or-use-demo-mode"
-    description: "Alibaba Dashscope API Key for the Qwen 3.7 Plus Agent (optional)"
+    default: ""
+    description: "Alibaba DashScope API key; required outside demo mode"
     label: "Qwen API Key"
     type: password
     required: false

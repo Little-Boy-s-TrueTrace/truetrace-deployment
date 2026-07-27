@@ -180,12 +180,12 @@ spec:
           value: postgres://postgres:$(POSTGRES_PASSWORD)@postgres:5432/truetrace?sslmode=disable
         - name: KAFKA_BOOTSTRAP_SERVERS
           value: kafka-1:29092,kafka-2:29092,kafka-3:29092
-        - name: TRUETRACE_INTERNAL_TOKEN
+        - name: TRUETRACE_SECURITY_SYNC_TOKEN
           valueFrom:
             secretKeyRef:
               name: truetrace-secrets
               key: truetrace-security-sync-token
-        - name: BANK_BACKEND_URL
+        - name: BACKEND_URL
           value: http://be-backend:8080
         ports:
         - containerPort: 8082

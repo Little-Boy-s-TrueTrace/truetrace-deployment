@@ -6,12 +6,14 @@ resources:
 
 secretGenerator:
   - name: truetrace-secrets
-    behavior: merge
+    behavior: create
+    files:
+      - htpasswd=secrets/.htpasswd
     literals:
-      - postgres-password=postgres-prod-secret-1234
-      - jwt-secret=truetrace-jwt-secure-signing-key-high-entropy-12345
-      - truetrace-security-sync-token=truetrace-sync-token-9876-xyz
-      - dashscope-api-key=change-me-or-use-demo-mode
+      - postgres-password=local-demo-postgres-only
+      - jwt-secret=local-demo-jwt-signing-key-not-for-production
+      - truetrace-security-sync-token=local-demo-internal-token-not-for-production
+      - dashscope-api-key=local-demo-no-external-key
       - llm-provider=demo
 
 generatorOptions:

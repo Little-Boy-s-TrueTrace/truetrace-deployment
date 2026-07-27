@@ -21,13 +21,3 @@ configMapGenerator:
   - name: nginx-gateway-config
     files:
       - default.conf=configs/default.conf
-
-secretGenerator:
-  - name: truetrace-secrets
-    files:
-      - htpasswd=configs/.htpasswd
-    literals:
-      - postgres-password=postgres-prod-secret-1234
-      - jwt-secret=truetrace-jwt-secure-signing-key-high-entropy-12345
-      - truetrace-security-sync-token=truetrace-sync-token-9876-xyz
-      - dashscope-api-key=change-me-or-use-external-secret

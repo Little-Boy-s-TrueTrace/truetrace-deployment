@@ -6,10 +6,10 @@ environment: "local"
 
 # Common configuration secrets
 secrets:
-  postgresPassword: "postgres-prod-secret-1234"
-  jwtSecret: "truetrace-jwt-secure-signing-key-high-entropy-12345"
-  truetraceSecuritySyncToken: "truetrace-sync-token-9876-xyz"
-  dashscopeApiKey: "change-me-or-use-external-secret"
+  postgresPassword: ""
+  jwtSecret: ""
+  truetraceSecuritySyncToken: ""
+  dashscopeApiKey: ""
 
 # AWS Configuration (Only used when environment is "aws")
 aws:
