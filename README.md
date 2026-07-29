@@ -7,7 +7,7 @@ Docker Compose orchestration for the TrueTrace Multi-Agent Deepfake & AML Compli
 ```bash
 cp .env.example .env
 # Edit .env with your configuration
-docker-compose up -d
+docker compose up -d --build --wait
 ```
 
 ## Full-stack verification
@@ -19,10 +19,16 @@ docker compose -f truetrace-deployment/docker-compose.yml up -d --build --wait
 python truetrace-deployment/scripts/full_stack_smoke.py
 ```
 
-The verifier checks normal and synthetic KYC decisions, then sends VND 1
-billion into a mule account and fans out VND 800 million to 20 beneficiaries
-within 60 seconds. It requires a freeze, an alert for the full suspicious
-amount, and a linked draft STR.
+The verifier checks normal and synthetic KYC decisions, approves every AML
+source account, then sends VND 1 billion into a mule account and fans out VND
+800 million to 20 beneficiaries within 60 seconds. It verifies offset advances
+on all six Kafka topics and queries PostgreSQL for the KYC sessions,
+transactions, freeze, alert, and linked draft STR. It also verifies the human
+review/submit transition and creates a separate two-transfer structuring case
+that must freeze the account and create a VND 380 million `STRUCTURING` alert
+with a linked draft STR. It also prepares an untouched equivalent account for
+the two live recording clicks. No balance or compliance row is inserted with
+test SQL.
 
 ## Services
 

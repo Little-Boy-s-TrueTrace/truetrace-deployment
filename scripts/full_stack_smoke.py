@@ -17,14 +17,68 @@ from urllib.request import Request, urlopen
 BASE_URL = os.getenv("TRUETRACE_BASE_URL", "http://localhost").rstrip("/")
 BANK_API = f"{BASE_URL}/api-bank/api"
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def runtime_setting(name: str, default: str) -> str:
+    """Read process environment, then the same local .env used by Compose."""
+    value = os.getenv(name)
+    if value is not None:
+        return value
+    env_file = ROOT / "truetrace-deployment/.env"
+    if env_file.exists():
+        for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, candidate = line.split("=", 1)
+            if key.strip() == name:
+                return candidate.strip().strip("\"'")
+    return default
+
+
 IMAGE_PATH = Path(
-    os.getenv("TRUETRACE_TEST_IMAGE", ROOT / "truetrace-web-client/public/logo.png")
+    os.getenv("TRUETRACE_TEST_IMAGE", ROOT / "demo-data/kyc-images/selfie.png")
+)
+ID_FRONT_PATH = Path(
+    os.getenv(
+        "TRUETRACE_TEST_ID_FRONT",
+        ROOT / "demo-data/kyc-images/cccd_front.png",
+    )
+)
+ID_BACK_PATH = Path(
+    os.getenv(
+        "TRUETRACE_TEST_ID_BACK",
+        ROOT / "demo-data/kyc-images/cccd_back.png",
+    )
 )
 SYNTHETIC_PATH = Path(
-    os.getenv("TRUETRACE_SYNTHETIC_SAMPLE", ROOT / "README.md")
+    os.getenv(
+        "TRUETRACE_SYNTHETIC_SAMPLE",
+        ROOT / "demo-data/kyc-images/synthetic_deepfake_test.png",
+    )
 )
 POSTGRES_CONTAINER = os.getenv(
     "TRUETRACE_POSTGRES_CONTAINER", "truetrace-postgres"
+)
+KAFKA_CONTAINER = os.getenv("TRUETRACE_KAFKA_CONTAINER", "truetrace-kafka")
+POSTGRES_USER = runtime_setting("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = runtime_setting("POSTGRES_PASSWORD", "postgres")
+POSTGRES_DB = runtime_setting("POSTGRES_DB", "truetrace")
+INTERNAL_TOKEN = runtime_setting(
+    "TRUETRACE_SECURITY_SYNC_TOKEN", "change-me-internal-service-token"
+)
+COMPLIANCE_OPERATOR = "e2e.compliance.officer"
+COMPLIANCE_HEADERS = {
+    "X-TrueTrace-Internal-Token": INTERNAL_TOKEN,
+    "X-TrueTrace-Operator": COMPLIANCE_OPERATOR,
+}
+KAFKA_TOPICS = (
+    "truetrace.kyc.submissions",
+    "truetrace.transactions",
+    "truetrace.findings.deepfake",
+    "truetrace.findings.money_trail",
+    "truetrace.alerts",
+    "truetrace.reports.str",
 )
 
 
@@ -111,10 +165,17 @@ def multipart_body(fields: dict[str, str], files: dict[str, Path]) -> tuple[byte
     return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
 
-def create_kyc(token: str, customer_name: str, cccd: str, image: Path) -> str:
+def create_kyc(
+    token: str,
+    customer_name: str,
+    cccd: str,
+    selfie: Path,
+    id_front: Path = ID_FRONT_PATH,
+    id_back: Path = ID_BACK_PATH,
+) -> str:
     body, content_type = multipart_body(
         {"customerName": customer_name, "cccdNumber": cccd},
-        {"selfie": image, "idFront": image, "idBack": image},
+        {"selfie": selfie, "idFront": id_front, "idBack": id_back},
     )
     result = request_json(
         "POST",
@@ -186,13 +247,13 @@ def psql(query: str) -> str:
         "docker",
         "exec",
         "-e",
-        "PGPASSWORD=postgres",
+        f"PGPASSWORD={POSTGRES_PASSWORD}",
         POSTGRES_CONTAINER,
         "psql",
         "-U",
-        "postgres",
+        POSTGRES_USER,
         "-d",
-        "truetrace",
+        POSTGRES_DB,
         "-t",
         "-A",
         "-v",
@@ -205,16 +266,133 @@ def psql(query: str) -> str:
     ).stdout.strip()
 
 
+def sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def assert_db_value(query: str, expected: str, label: str) -> None:
+    actual = psql(query)
+    assert actual == expected, f"{label}: expected {expected!r}, got {actual!r}"
+
+
+def kafka_topic_offset(topic: str) -> int:
+    command = [
+        "docker",
+        "exec",
+        KAFKA_CONTAINER,
+        "/opt/kafka/bin/kafka-get-offsets.sh",
+        "--bootstrap-server",
+        "localhost:29092",
+        "--topic",
+        topic,
+    ]
+    output = subprocess.run(
+        command, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    offsets = []
+    for line in output.splitlines():
+        try:
+            offsets.append(int(line.rsplit(":", 1)[1]))
+        except (IndexError, ValueError) as exc:
+            raise AssertionError(
+                f"Unexpected Kafka offset output for {topic}: {line!r}"
+            ) from exc
+    if not offsets:
+        raise AssertionError(f"Kafka topic {topic} returned no partition offsets")
+    return sum(offsets)
+
+
+def kafka_offsets() -> dict[str, int]:
+    return {topic: kafka_topic_offset(topic) for topic in KAFKA_TOPICS}
+
+
+def wait_for_topic_advance(
+    before: dict[str, int], topic: str, minimum: int, timeout_seconds: int = 45
+) -> int:
+    deadline = time.monotonic() + timeout_seconds
+    current = kafka_topic_offset(topic)
+    while current - before[topic] < minimum and time.monotonic() < deadline:
+        time.sleep(1)
+        current = kafka_topic_offset(topic)
+    advanced = current - before[topic]
+    assert advanced >= minimum, (
+        f"Kafka topic {topic} advanced by {advanced}; expected at least {minimum}"
+    )
+    return advanced
+
+
+def demo_cccd(seed: int) -> str:
+    """Generate a format-valid, run-specific Vietnamese demo CCCD number."""
+    return f"001200{seed % 1_000_000:06d}"
+
+
+def approve_kyc(
+    token: str, account_label: str, cccd_seed: int
+) -> tuple[str, dict[str, Any]]:
+    session_id = create_kyc(
+        token,
+        f"TrueTrace {account_label}",
+        demo_cccd(cccd_seed),
+        IMAGE_PATH,
+    )
+    return session_id, wait_for_kyc_status(token, session_id, "APPROVED")
+
+
+def wait_for_alert_and_report(
+    account_number: str,
+    expected_alert_type: str | None = None,
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    account_status = ""
+    for _ in range(45):
+        account_status = psql(
+            "SELECT status FROM accounts "
+            f"WHERE account_number={sql_literal(account_number)};"
+        )
+        alerts = request_json(
+            "GET",
+            f"{BANK_API}/aml/alerts",
+            headers=COMPLIANCE_HEADERS,
+        )
+        matching_alerts = [
+            item
+            for item in alerts
+            if item.get("primaryAccountNumber") == account_number
+            and (
+                expected_alert_type is None
+                or item.get("alertType") == expected_alert_type
+            )
+        ]
+        if matching_alerts:
+            alert = max(matching_alerts, key=lambda item: item["id"])
+            reports = request_json(
+                "GET",
+                f"{BANK_API}/str/reports",
+                headers=COMPLIANCE_HEADERS,
+            )
+            matching_reports = [
+                item for item in reports if item.get("alertId") == alert["id"]
+            ]
+            if account_status == "FROZEN" and matching_reports:
+                report = max(matching_reports, key=lambda item: item["id"])
+                return account_status, alert, report
+        time.sleep(1)
+    raise AssertionError(
+        "Timed out waiting for persisted freeze, alert, and linked STR "
+        f"for account {account_number}; last status={account_status!r}"
+    )
+
+
 def main() -> None:
     wait_for_url(f"{BASE_URL}/")
+    wait_for_url(f"{BASE_URL}/api-bank/health")
+    wait_for_url(f"{BASE_URL}/soc/")
 
     auth_stamp = str(int(time.time()))
     auth_username = f"kyc_{auth_stamp}"
     auth_password = "Test@12345"
     register(auth_username, auth_password)
     auth_token = login(auth_username, auth_password)
-    wait_for_url(f"{BASE_URL}/api-bank/health")
-    wait_for_url(f"{BASE_URL}/soc/")
+    kafka_before = kafka_offsets()
 
     expect_http_status("GET", f"{BANK_API}/aml/alerts", 401)
 
@@ -231,8 +409,21 @@ def main() -> None:
     rejected = wait_for_kyc_status(auth_token, rejected_id, "REJECTED")
     assert rejected["deepfakeScore"] >= 80
     assert rejected["recommendedAction"] == "BLOCK_ONBOARDING"
+    assert_db_value(
+        "SELECT status FROM kyc_sessions "
+        f"WHERE session_id={sql_literal(approved_id)};",
+        "APPROVED",
+        "approved KYC persistence",
+    )
+    assert_db_value(
+        "SELECT status FROM kyc_sessions "
+        f"WHERE session_id={sql_literal(rejected_id)};",
+        "REJECTED",
+        "rejected KYC persistence",
+    )
 
     stamp = str(int(time.time()))
+    cccd_seed = int(stamp[-6:])
     password = "Test@12345"
     funder_one = f"fund1_{stamp}"
     funder_two = f"fund2_{stamp}"
@@ -244,13 +435,31 @@ def main() -> None:
         register(f"target{index}_{stamp}", password) for index in range(1, 21)
     ]
 
-    psql(
-        "UPDATE accounts SET balance=600000000 "
-        f"WHERE account_number IN ('{funder_one_account}','{funder_two_account}');"
-    )
     funder_one_token = login(funder_one, password)
     funder_two_token = login(funder_two, password)
     mule_token = login(mule_user, password)
+    for index, (token, label) in enumerate(
+        (
+            (funder_one_token, "AML Funder One"),
+            (funder_two_token, "AML Funder Two"),
+            (mule_token, "AML Mule"),
+        ),
+        start=1,
+    ):
+        _, result = approve_kyc(token, label, cccd_seed + index)
+        assert result["cccdValid"] is True
+
+    for account in (funder_one_account, funder_two_account):
+        balance = float(
+            psql(
+                "SELECT balance FROM accounts "
+                f"WHERE account_number={sql_literal(account)};"
+            )
+        )
+        assert balance >= 500_000_000, (
+            "DEMO_INITIAL_BALANCE must fund the AML flow; "
+            f"{account} has {balance:.0f} VND"
+        )
 
     started = time.monotonic()
     transfer(
@@ -278,66 +487,192 @@ def main() -> None:
     elapsed = time.monotonic() - started
     assert elapsed <= 60, f"AML scenario exceeded 60 seconds: {elapsed:.2f}s"
 
-    alert: dict[str, Any] | None = None
-    report: dict[str, Any] | None = None
-    account_status = ""
-    for _ in range(30):
-        account_status = psql(
-            "SELECT status FROM accounts "
-            f"WHERE account_number='{mule_account}';"
-        )
-        alerts = request_json(
-            "GET",
-            f"{BANK_API}/aml/alerts",
-            headers={"Authorization": f"Bearer {auth_token}"},
-        )
-        matching_alerts = [
-            item
-            for item in alerts
-            if item.get("primaryAccountNumber") == mule_account
-        ]
-        if matching_alerts:
-            alert = max(matching_alerts, key=lambda item: item["id"])
-            reports = request_json(
-                "GET",
-                f"{BANK_API}/str/reports",
-                headers={"Authorization": f"Bearer {auth_token}"},
-            )
-            matching_reports = [
-                item for item in reports if item.get("alertId") == alert["id"]
-            ]
-            if account_status == "FROZEN" and matching_reports:
-                report = max(matching_reports, key=lambda item: item["id"])
-                break
-        time.sleep(1)
+    account_status, alert, report = wait_for_alert_and_report(
+        mule_account,
+        "RAPID_MOVEMENT",
+    )
 
     assert account_status == "FROZEN"
-    assert alert is not None
     assert alert["riskScore"] == 10
     assert float(alert["totalAmount"]) == 1_000_000_000
     assert alert["timeWindowSeconds"] == 60
-    assert report is not None
     assert report["status"] == "DRAFT"
     assert report["riskScore"] == 10
     assert float(report["totalAmount"]) == 1_000_000_000
+    assert_db_value(
+        "SELECT status FROM accounts "
+        f"WHERE account_number={sql_literal(mule_account)};",
+        "FROZEN",
+        "mule freeze persistence",
+    )
+    assert_db_value(
+        "SELECT COUNT(*) FROM transactions "
+        f"WHERE source_account_number={sql_literal(mule_account)};",
+        "20",
+        "rapid-dispersion transaction persistence",
+    )
+    assert_db_value(
+        "SELECT COUNT(*) FROM aml_alerts "
+        f"WHERE alert_id={sql_literal(alert['alertId'])};",
+        "1",
+        "AML alert persistence",
+    )
+    assert_db_value(
+        "SELECT COUNT(*) FROM str_reports "
+        f"WHERE report_id={sql_literal(report['reportId'])} "
+        f"AND alert_id={int(alert['id'])} AND status='DRAFT';",
+        "1",
+        "draft STR persistence and alert linkage",
+    )
 
-    auth_headers = {"Authorization": f"Bearer {auth_token}"}
+    # Two near-threshold transfers form one repeated-structuring case. The
+    # second event crosses the real freeze threshold and creates an alert/STR.
+    structurer = f"structurer_{stamp}"
+    structurer_account = register(structurer, password)
+    structurer_token = login(structurer, password)
+    structure_targets = [
+        register(f"struct_target{index}_{stamp}", password) for index in range(1, 3)
+    ]
+    approve_kyc(structurer_token, "Structuring Demo", cccd_seed + 10)
+    findings_before = kafka_topic_offset("truetrace.findings.money_trail")
+    for index, target in enumerate(structure_targets, start=1):
+        transfer(
+            structurer_token,
+            structurer_account,
+            target,
+            190_000_000,
+            f"Manual demo structuring transfer {index}",
+        )
+    structuring_offsets = {
+        "truetrace.findings.money_trail": findings_before,
+    }
+    wait_for_topic_advance(
+        structuring_offsets,
+        "truetrace.findings.money_trail",
+        2,
+    )
+    struct_status, struct_alert, struct_report = wait_for_alert_and_report(
+        structurer_account,
+        "STRUCTURING",
+    )
+    assert struct_status == "FROZEN"
+    assert struct_alert["riskScore"] >= 7
+    assert float(struct_alert["totalAmount"]) == 380_000_000
+    assert struct_alert["timeWindowSeconds"] == 60
+    assert struct_report["status"] == "DRAFT"
+    assert struct_report["riskScore"] >= 7
+    assert float(struct_report["totalAmount"]) == 380_000_000
+
+    structuring_chain = json.loads(struct_alert["transactionChainJson"])
+    assert len(structuring_chain) == 2
+    assert all(
+        item["from"] == structurer_account for item in structuring_chain
+    )
+    assert {item["to"] for item in structuring_chain} == set(structure_targets)
+    assert_db_value(
+        "SELECT COUNT(*) FROM transactions "
+        f"WHERE source_account_number={sql_literal(structurer_account)} "
+        "AND amount=190000000;",
+        "2",
+        "repeated-structuring transaction persistence",
+    )
+    assert_db_value(
+        "SELECT status FROM accounts "
+        f"WHERE account_number={sql_literal(structurer_account)};",
+        "FROZEN",
+        "repeated-structuring freeze persistence",
+    )
+    assert_db_value(
+        "SELECT COUNT(*) FROM aml_alerts "
+        f"WHERE alert_id={sql_literal(struct_alert['alertId'])} "
+        "AND alert_type='STRUCTURING' AND total_amount=380000000;",
+        "1",
+        "repeated-structuring alert persistence",
+    )
+    assert_db_value(
+        "SELECT COUNT(*) FROM str_reports "
+        f"WHERE report_id={sql_literal(struct_report['reportId'])} "
+        f"AND alert_id={int(struct_alert['id'])} AND status='DRAFT' "
+        "AND total_amount=380000000;",
+        "1",
+        "repeated-structuring STR persistence and linkage",
+    )
+
+    # Prepare a second approved but untouched account for the two live clicks
+    # in the recording. Its behavior is covered by the verified case above.
+    manual_structurer = f"manual_structurer_{stamp}"
+    manual_structurer_account = register(manual_structurer, password)
+    manual_structurer_token = login(manual_structurer, password)
+    manual_targets = [
+        register(f"manual_target{index}_{stamp}", password)
+        for index in range(1, 3)
+    ]
+    approve_kyc(
+        manual_structurer_token,
+        "Manual Structuring Recording",
+        cccd_seed + 11,
+    )
+
     report_url = f"{BANK_API}/str/reports/{report['reportId']}"
-    expect_http_status("POST", f"{report_url}/submit", 409, headers=auth_headers)
+    expect_http_status(
+        "POST", f"{report_url}/submit", 409, headers=COMPLIANCE_HEADERS
+    )
     review_payload = dict(report)
     review_payload["status"] = "READY_FOR_REVIEW"
-    reviewed = request_json("PUT", f"{report_url}/status", review_payload, auth_headers)
+    reviewed = request_json(
+        "PUT", f"{report_url}/status", review_payload, COMPLIANCE_HEADERS
+    )
     assert reviewed["status"] == "READY_FOR_REVIEW"
-    assert reviewed["reviewedBy"] == auth_username
-    submitted = request_json("POST", f"{report_url}/submit", headers=auth_headers)
+    assert reviewed["reviewedBy"] == COMPLIANCE_OPERATOR
+    submitted = request_json(
+        "POST", f"{report_url}/submit", headers=COMPLIANCE_HEADERS
+    )
     assert submitted["status"] == "SUBMITTED"
-    assert submitted["submittedBy"] == auth_username
+    assert submitted["submittedBy"] == COMPLIANCE_OPERATOR
+    assert_db_value(
+        "SELECT status FROM str_reports "
+        f"WHERE report_id={sql_literal(report['reportId'])};",
+        "SUBMITTED",
+        "submitted STR persistence",
+    )
+
+    topic_advances = {
+        "truetrace.kyc.submissions": wait_for_topic_advance(
+            kafka_before, "truetrace.kyc.submissions", 7
+        ),
+        "truetrace.transactions": wait_for_topic_advance(
+            kafka_before, "truetrace.transactions", 24
+        ),
+        "truetrace.findings.deepfake": wait_for_topic_advance(
+            kafka_before, "truetrace.findings.deepfake", 7
+        ),
+        "truetrace.findings.money_trail": wait_for_topic_advance(
+            kafka_before, "truetrace.findings.money_trail", 3
+        ),
+        "truetrace.alerts": wait_for_topic_advance(
+            kafka_before, "truetrace.alerts", 2
+        ),
+        "truetrace.reports.str": wait_for_topic_advance(
+            kafka_before, "truetrace.reports.str", 2
+        ),
+    }
 
     print("TrueTrace full-stack smoke test passed")
     print(f"KYC approved={approved_id} rejected={rejected_id}")
     print(
         f"AML mule={mule_account} elapsed={elapsed:.2f}s "
         f"alert={alert['alertId']} report={report['reportId']}"
+    )
+    print(f"Kafka topic advances={topic_advances}")
+    print(
+        "Verified structuring "
+        f"source={structurer_account} alert={struct_alert['alertId']} "
+        f"report={struct_report['reportId']}"
+    )
+    print(
+        "Recording-ready structuring "
+        f"username={manual_structurer} password={password} "
+        f"source={manual_structurer_account} targets={manual_targets}"
     )
 
 

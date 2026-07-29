@@ -161,6 +161,8 @@ services:
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
       TRUETRACE_SECURITY_SYNC_TOKEN: ${TRUETRACE_SECURITY_SYNC_TOKEN:-change-me-internal-service-token}
       TRUETRACE_DEMO_SEED_ENABLED: "true"
+      TRUETRACE_REGISTRATION_INITIAL_BALANCE: ${DEMO_INITIAL_BALANCE:-1000000000}
+      TRUETRACE_KYC_REQUIRED_FOR_TRANSFERS: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -254,6 +256,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       BACKEND_URL: http://backend:8080
       TRUETRACE_SECURITY_SYNC_TOKEN: ${TRUETRACE_SECURITY_SYNC_TOKEN:-change-me-internal-service-token}
+      TRUETRACE_DASHBOARD_OPERATORS: ${TRUETRACE_DASHBOARD_OPERATORS:-10001:admin,10002:sarah,10003:alex}
     depends_on:
       postgres:
         condition: service_healthy
