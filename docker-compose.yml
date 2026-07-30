@@ -258,6 +258,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-truetrace}?sslmode=disable
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       BACKEND_URL: http://backend:8080
+      AGENT_ENGINE_URL: http://agent-engine:8080
       TRUETRACE_SECURITY_SYNC_TOKEN: ${TRUETRACE_SECURITY_SYNC_TOKEN:-change-me-internal-service-token}
       TRUETRACE_DASHBOARD_OPERATORS: ${TRUETRACE_DASHBOARD_OPERATORS:-10001:admin,10002:sarah,10003:alex}
     depends_on:
