@@ -163,6 +163,8 @@ services:
       TRUETRACE_DEMO_SEED_ENABLED: "true"
       TRUETRACE_REGISTRATION_INITIAL_BALANCE: ${DEMO_INITIAL_BALANCE:-1000000000}
       TRUETRACE_KYC_REQUIRED_FOR_TRANSFERS: "true"
+    volumes:
+      - evidence_data:/data/evidence
     depends_on:
       postgres:
         condition: service_healthy
@@ -333,6 +335,8 @@ services:
 # Named Volumes
 # ============================================
 volumes:
+  evidence_data:
+    driver: local
   postgres_data:
     driver: local
   redis_data:

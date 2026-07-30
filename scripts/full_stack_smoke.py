@@ -203,14 +203,16 @@ def wait_for_kyc_status(token: str, session_id: str, expected: str) -> dict[str,
     raise AssertionError(f"KYC {session_id} did not reach {expected}: {result}")
 
 
-def register(username: str, password: str) -> str:
+def register(
+    username: str, password: str, full_name: str | None = None
+) -> str:
     result = request_json(
         "POST",
         f"{BANK_API}/auth/register",
         {
             "username": username,
             "password": password,
-            "fullName": username,
+            "fullName": full_name or f"TrueTrace Demo {username}",
             "email": f"{username}@truetrace.test",
         },
     )
@@ -390,7 +392,7 @@ def main() -> None:
     auth_stamp = str(int(time.time()))
     auth_username = f"kyc_{auth_stamp}"
     auth_password = "Test@12345"
-    register(auth_username, auth_password)
+    register(auth_username, auth_password, "Nguyễn Văn An — KYC Demo")
     auth_token = login(auth_username, auth_password)
     kafka_before = kafka_offsets()
 
@@ -428,11 +430,16 @@ def main() -> None:
     funder_one = f"fund1_{stamp}"
     funder_two = f"fund2_{stamp}"
     mule_user = f"mule_{stamp}"
-    funder_one_account = register(funder_one, password)
-    funder_two_account = register(funder_two, password)
-    mule_account = register(mule_user, password)
+    funder_one_account = register(funder_one, password, "Demo Funding Customer One")
+    funder_two_account = register(funder_two, password, "Demo Funding Customer Two")
+    mule_account = register(mule_user, password, "Demo Monitored Mule Account")
     targets = [
-        register(f"target{index}_{stamp}", password) for index in range(1, 21)
+        register(
+            f"target{index}_{stamp}",
+            password,
+            f"Demo Rapid-Movement Beneficiary {index:02d}",
+        )
+        for index in range(1, 21)
     ]
 
     funder_one_token = login(funder_one, password)
@@ -528,10 +535,17 @@ def main() -> None:
     # Two near-threshold transfers form one repeated-structuring case. The
     # second event crosses the real freeze threshold and creates an alert/STR.
     structurer = f"structurer_{stamp}"
-    structurer_account = register(structurer, password)
+    structurer_account = register(
+        structurer, password, "Nguyễn Văn An — Verified Structuring"
+    )
     structurer_token = login(structurer, password)
     structure_targets = [
-        register(f"struct_target{index}_{stamp}", password) for index in range(1, 3)
+        register(
+            f"struct_target{index}_{stamp}",
+            password,
+            f"Demo Structuring Recipient {index}",
+        )
+        for index in range(1, 3)
     ]
     approve_kyc(structurer_token, "Structuring Demo", cccd_seed + 10)
     findings_before = kafka_topic_offset("truetrace.findings.money_trail")
@@ -601,10 +615,16 @@ def main() -> None:
     # Prepare a second approved but untouched account for the two live clicks
     # in the recording. Its behavior is covered by the verified case above.
     manual_structurer = f"manual_structurer_{stamp}"
-    manual_structurer_account = register(manual_structurer, password)
+    manual_structurer_account = register(
+        manual_structurer, password, "Nguyễn Văn An — Live AML Recording"
+    )
     manual_structurer_token = login(manual_structurer, password)
     manual_targets = [
-        register(f"manual_target{index}_{stamp}", password)
+        register(
+            f"manual_target{index}_{stamp}",
+            password,
+            f"Live Demo Recipient {index}",
+        )
         for index in range(1, 3)
     ]
     approve_kyc(
