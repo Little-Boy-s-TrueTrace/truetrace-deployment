@@ -214,7 +214,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-qwen-plus}
       LLM_API_ENDPOINT: ${LLM_API_ENDPOINT:-https://dashscope-intl.aliyuncs.com/compatible-mode/v1}
       # Agent thresholds (demo-friendly: lower for live demonstration)
-      MONEY_TRAIL_FREEZE_THRESHOLD: ${MONEY_TRAIL_FREEZE_THRESHOLD:-7.0}
+      MONEY_TRAIL_FREEZE_THRESHOLD: ${MONEY_TRAIL_FREEZE_THRESHOLD:-9.5}
       MONEY_TRAIL_WINDOW_SECONDS: ${MONEY_TRAIL_WINDOW_SECONDS:-3600}
       FAN_OUT_MIN_TARGETS: ${FAN_OUT_MIN_TARGETS:-3}
       RAPID_MOVEMENT_MIN_INFLOW_VND: ${RAPID_MOVEMENT_MIN_INFLOW_VND:-5000000}
