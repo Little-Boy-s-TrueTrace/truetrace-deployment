@@ -387,7 +387,7 @@ def wait_for_alert_and_report(
 def main() -> None:
     wait_for_url(f"{BASE_URL}/")
     wait_for_url(f"{BASE_URL}/api-bank/health")
-    wait_for_url(f"{BASE_URL}/soc/")
+    wait_for_url(f"{BASE_URL}/monitor/")
 
     auth_stamp = str(int(time.time()))
     auth_username = f"kyc_{auth_stamp}"
