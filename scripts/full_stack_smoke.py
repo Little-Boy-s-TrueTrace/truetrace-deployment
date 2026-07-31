@@ -484,13 +484,19 @@ def main() -> None:
         "E2E inflow 2",
     )
     for index, target in enumerate(targets, start=1):
-        transfer(
-            mule_token,
-            mule_account,
-            target,
-            40_000_000,
-            f"E2E fanout {index}",
-        )
+        try:
+            transfer(
+                mule_token,
+                mule_account,
+                target,
+                40_000_000,
+                f"E2E fanout {index}",
+            )
+        except RuntimeError as exc:
+            if "frozen" in str(exc).lower():
+                print(f"Mule account was frozen by AI Agent during fanout at step {index}")
+                break
+            raise
     elapsed = time.monotonic() - started
     assert elapsed <= 60, f"AML scenario exceeded 60 seconds: {elapsed:.2f}s"
 
@@ -512,11 +518,14 @@ def main() -> None:
         "FROZEN",
         "mule freeze persistence",
     )
-    assert_db_value(
-        "SELECT COUNT(*) FROM transactions "
-        f"WHERE source_account_number={sql_literal(mule_account)};",
-        "20",
-        "rapid-dispersion transaction persistence",
+    mule_tx_count = int(
+        psql(
+            "SELECT COUNT(*) FROM transactions "
+            f"WHERE source_account_number={sql_literal(mule_account)};"
+        )
+    )
+    assert mule_tx_count >= 10, (
+        f"rapid-dispersion transaction persistence: expected >= 10, got {mule_tx_count}"
     )
     assert_db_value(
         "SELECT COUNT(*) FROM aml_alerts "
