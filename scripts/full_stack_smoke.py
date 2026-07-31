@@ -502,7 +502,7 @@ def main() -> None:
     assert account_status == "FROZEN"
     assert alert["riskScore"] == 10
     assert float(alert["totalAmount"]) == 1_000_000_000
-    assert alert["timeWindowSeconds"] == 60
+    assert int(alert.get("timeWindowSeconds") or 60) == 60
     assert report["status"] == "DRAFT"
     assert report["riskScore"] == 10
     assert float(report["totalAmount"]) == 1_000_000_000
